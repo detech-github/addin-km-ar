@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Distance totale et catégorisation des A/R automatisées</title>
+
+    <style>
+        body {
+            padding: 3%;
+        }
+
+        .highlight-end {
+            background-color: #d4a775 !important;
+            color: white !important;
+        }
+
+        .dark-header {
+            background-color: #1f2833 !important;
+            color: white !important;
+        }
+
+        .highlight {
+            background-color: #5293c6 !important;
+            color: black !important;
+        }
+
+        .highlight-simple {
+            background-color: #f3f3f3 !important;
+            color: black !important;
+        }
+
+        .loader-container {
+            position: relative;
+            height: 50px;
+            /* Taille du loader */
+            text-align: center;
+            /* Alignement horizontal au centre */
+        }
+
+        .loader {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            /* Centrage vertical et horizontal */
+            border: 8px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 8px solid #3498db;
+            width: 50px;
+            height: 50px;
+            animation: spin 2s linear infinite;
+            display: none;
+        }
+
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .space-bottom {
+            margin-bottom: 10px;
+        }
+    </style>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/css/bootstrap.min.css"
+        integrity="sha384-HSMxcRTRxnN+Bdg0JdbxYKrThecOKuH5zCYotlSAcp1+c8xmyTe9GYg1l9a69psu" crossorigin="anonymous">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/css/bootstrap-theme.min.css"
+        integrity="sha384-6pzBo3FDv/PJ8r2KRkGHifhEocL+1X2rVCTTkUfGk7/0pbek5mMa1upzvWbrUbOZ" crossorigin="anonymous">
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/js/bootstrap.min.js"
+        integrity="sha384-aJ21OjlMXNL5UyIl/XNwTMqvzeRMZH2w8c5cRVpzpU8Y5bApTppSuUkhZXN0VxHd"
+        crossorigin="anonymous"></script>
+
+</head>
+
+<body>
+    <div id="app" class="container">
+        <div id="ftiAddin" class="">
+            <header class="geotabPageHeader"><span>
+                    <h2 class="geotabPageName">Distance totale et catégorisation des A/R automatisées</h2>
+                    <p id="ftiVersion">Version: 1.0.1</p>
+                    <div id="userGuide"><a href="" target="_blank">Guide de l'utilisateur (FR)</a></div>
+                </span>
+                <hr style="border-top:3px solid #5293c6">
+            </header>
+            <div id="ftiParentDiv">
+                <h3 class="geotabPageName text-left">Les données à traiter</h3>
+                <div class="form-inline">
+
+                    <div class="form-group">
+                        <input type="file" id="fileInput" accept=".xls,.xlsx" class="form-control">
+                    </div>
+
+                    <div class="form-group">
+                        <div class="text-left">
+                            <button id="downloadButton" class="btn btn-primary">Traiter les données</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <button id="exportButton" class="btn btn-success" style="display: none;">Exporter</button>
+                    </div>
+
+                </div>
+            </div>
+            <hr style="border-top:3px solid #5293c6">
+
+            <div class="loader-container">
+                <h6 id="text-loader text-center">Traitement en cours...</h6>
+                <div class="loader"></div>
+            </div>
+
+            <div id="tableSummary"></div>
+            <br />
+            <div id="tableContainer"></div>
+
+        </div>
+        <script>
+            try {
+                geotab.addin.dcar = (api, state) => {
+                    var getVehicles = function (finishedCallback) {
+                        api.call("Get", {
+                            typeName: "Device",
+                            search: {
+                                fromDate: new Date()
+                            }
+                        }, function (results) {
+                            vehicles = results.map(function (vehicle) {
+                                return {
+                                    name: vehicle.name,
+                                    id: vehicle.id
+                                };
+                            });
+                            finishedCallback();
+                        }, function (errorString) {
+                            alert(errorString);
+                        });
+                    };
+
+                    return {
+                        initialize(api, state, callback) {
+                            getVehicles(callback);
+                        },
+                        focus(api, state) {
+
+                        },
+                        blur(api, state) {
+
+                        }
+                    };
+                };
+            }
+            catch { }
+        </script>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.4/xlsx.core.min.js"></script>
+        <script>
+
+            $(document).ready(function () {
+                $(".loader-container").hide();
+
+                $("#downloadButton").click(function () {
+                    $("#tableContainer").empty();
+                    $("#tableSummary").empty();
+                    $(".loader-container").show();
+                    $(".loader").show();
+                    handleFileUpload()
+                });
+
+                $("#exportButton").click(function () {
+                    var wb = XLSX.utils.table_to_book($("#tableContainer")[0], { sheet: "Rapport" });
+                    var now = new Date();
+                    var prefix = "Rapport-KM-AR-AUTOMATISÉS";
+                    var formattedDate = now.toLocaleDateString("fr-FR").replace(/\//g, "-"); // Format de date "jj-mm-aaaa"
+                    var formattedTime = now.toLocaleTimeString("fr-FR", { hour12: false }).replace(/:/g, ""); // Format de l'heure "hhmmss"
+                    report_name = prefix + "-" + formattedDate + "-" + formattedTime + ".xlsx";
+                    XLSX.writeFile(wb, report_name);
+                });
+
+                processData = function (data, startRowNumber) {
+
+                    var table = $("<table class='table table-striped'></table>");
+
+                    var indexDistance = 0;
+                    var indexLocation = 0;
+                    var indexDevice = 0;
+                    var indexDateDebut = 0;
+                    var indexDateFin = 0;
+                    var indexStopDuration = 0;
+                    var startRowNumber = 0;
+
+                    for (let i = 0; i < data.length; i++) {
+                        let row = data[i];
+                        let headerFound = false;
+                        for (let cell of row) {
+                            if (cell === "Emplacement" || cell === "Distance") {
+                                startRowNumber = i;
+                                headerFound = true;
+                                break;
+                            }
+                        }
+                        if (headerFound) {
+                            break;
+                        }
+                    }
+
+                    var headerRow = $("<tr></tr>");
+                    data[startRowNumber].forEach((header, index) => {
+                        switch (header) {
+                            case "Durée d’arrêt":
+                            case "Durée de l’arrêt":
+                                indexStopDuration = index;
+                                break;
+                            case "Boîtier":
+                            case "Véhicule":
+                                indexDevice = index;
+                                headerRow.append("<th>" + header + "</th>");
+                                break;
+                            case "Emplacement":
+                                indexLocation = index;
+                                headerRow.append("<th>" + header + "</th>");
+                                break;
+                            case "Distance":
+                                indexDistance = index;
+                                headerRow.append("<th>" + header + "</th>");
+                                break;
+                            /*
+                        case "Trajet commencé":
+                        case "Date de début":
+                            indexDateDebut = index;
+                            headerRow.append("<th>" + header + "</th>");
+                            break;
+                        case "Trajet terminé":
+                        case "Date de l’arrêt":
+                            indexDateFin = index;
+                            headerRow.append("<th>" + header + "</th>");
+                            break;
+                        default:
+                            headerRow.append("<th>" + header + "</th>");
+                            break;*/
+                        }
+                    });
+
+
+                    console.log(`INDEX DISTANCE ${indexDistance}`);
+                    console.log(`INDEX LOCATION ${indexLocation}`);
+                    console.log(`INDEX DEVICE ${indexDevice}`);
+                    console.log(`INDEX STOP ${indexStopDuration}`);
+
+                    if (indexDistance === 0 && indexLocation == 0) {
+                        alert("Le fichier ne contient pas les colonnes necéssaires au traitement automatisé. Veuillez sélectionner un autre fichier.");
+                        $(".loader-container").hide();
+                        return;
+                    }
+
+                    headerRow.append("<th>KM A/R</th><th>Catégorie A/R</th>");
+
+                    headerRow.addClass("dark-header");
+
+                    table.append(headerRow);
+
+                    var lastIndexFound = 0;
+                    var lastDeviceFoundForIndex = ""
+                    var totalKmAR = 0;
+                    var countKmAR = 0;
+                    var countLessThan4Km = 0;
+                    var countLessThan10Km = 0;
+                    var countGreaterThan10Km = 0;
+                    var uniqueDevices = [];
+                    var totalDistance = 0;
+                    var maxRowNumber = data.length - 1;
+
+                    for (var i = startRowNumber + 1; i <= maxRowNumber; i++) {
+                        try {
+                            var rowData = data[i];
+
+                            /*
+                            rowData[indexDateDebut] = formatTimestamp(rowData[indexDateDebut]);
+                            rowData[indexDateFin] = formatTimestamp(rowData[indexDateFin]);
+*/
+                            lastRowForThisDevice = i === maxRowNumber ? true : data[i][indexDevice] !== data[i + 1][indexDevice]
+
+                            match = lastIndexFound !== i - 1 && (isPredefinedAddress(rowData[indexLocation]) || isDurationAR(rowData[indexStopDuration]) || lastRowForThisDevice)
+
+                            var row = $("<tr></tr>");
+
+                            rowData.forEach((cell, index) => {
+                                var td = $("<td></td>").text(cell);
+                                if (index !== indexStopDuration) {
+                                    row.append(td);
+                                }
+                            });
+
+                            distance = rowData[indexDistance];
+                            if (isNaN(distance)) {
+                                continue;
+                            }
+
+                            totalDistance += distance;
+
+                            if (i === startRowNumber + 1 && match) {
+                                rowData.splice(indexStopDuration, 1);
+                                table.append(row);
+                                continue;
+                            }
+
+                            if (match) {
+
+                                row.addClass("highlight");
+
+                                totalKmAR += totalDistance;
+                                countKmAR++;
+                                var tdTotalDistance = $("<td></td>").text(Math.ceil(totalDistance));
+                                row.append(tdTotalDistance);
+
+                                var distanceCategory = calculateDistanceCategory(Math.ceil(totalDistance));
+                                var tdDistanceCategory = $("<td></td>").text(distanceCategory);
+                                row.append(tdDistanceCategory);
+
+                                switch (distanceCategory) {
+                                    case "< 4 Kms":
+                                        countLessThan4Km++;
+                                        break;
+                                    case "< 10 Kms":
+                                        countLessThan10Km++;
+                                        break;
+                                    case "> 10 Kms":
+                                        countGreaterThan10Km++;
+                                        break;
+                                }
+
+                                var device = data[i][indexDevice];
+                                if (!uniqueDevices.includes(device)) {
+                                    uniqueDevices.push(device);
+                                }
+
+                                totalDistance = 0;
+                                lastIndexFound = i;
+
+                            }
+                            else {
+                                if (i % 2 === 0) {
+                                    row.addClass("highlight-simple");
+                                }
+                            }
+
+                            rowData.splice(indexStopDuration, 1);
+                            table.append(row);
+
+                            if (lastRowForThisDevice) {
+                                table.append("<tr></tr>");
+                                table.append("<tr></tr>");
+                            }
+                            else {
+                                table.append("<tr></tr>");
+                            }
+                            if ((i + 1) % 1000 === 0) {
+                                setTimeout(function () { }, 1000);
+                            }
+                        }
+                        catch {
+                            continue;
+                        }
+                    }
+
+                    table.append("<tr></tr>");
+                    table.append("<tr></tr>");
+
+                    var tableSummary = $("<table class='table table-striped'></table>");
+                    var summaryRow = $("<tr></tr>");
+                    summaryRow.append("<td> <b>Total KM A/R</b> : " + Math.ceil(totalKmAR) + "</td>");
+                    summaryRow.append("<td> <b>Courses</b> : " + countKmAR + "</td>");
+                    summaryRow.append("<td> <b>< 4 Kms</b> : " + countLessThan4Km + "</td>");
+                    summaryRow.append("<td> <b>< 10 Kms</b> : " + countLessThan10Km + "</td>");
+                    summaryRow.append("<td> <b>> 10 Kms</b> : " + countGreaterThan10Km + "</td>");
+                    summaryRow.append("<td> <b>Véhicules</b> : " + uniqueDevices.length + "</td>");
+
+                    var summaryRowSummary = $("<tr></tr>");
+                    summaryRowSummary.append("<td> <b>Total KM A/R</b> : " + Math.ceil(totalKmAR) + "</td>");
+                    summaryRowSummary.append("<td> <b>Courses</b> : " + countKmAR + "</td>");
+                    summaryRowSummary.append("<td> <b>< 4 Kms</b> : " + countLessThan4Km + "</td>");
+                    summaryRowSummary.append("<td> <b>< 10 Kms</b> : " + countLessThan10Km + "</td>");
+                    summaryRowSummary.append("<td> <b>> 10 Kms</b> : " + countGreaterThan10Km + "</td>");
+                    summaryRowSummary.append("<td> <b>Véhicules</b> : " + uniqueDevices.length + "</td>");
+
+                    table.append(summaryRow);
+                    tableSummary.append(summaryRowSummary);
+
+                    $("#tableContainer").append(table);
+                    $("#tableSummary").append(tableSummary);
+
+                    $("#exportButton").show();
+
+                    $(".loader-container").hide();
+
+                }
+
+                calculateDistanceCategory = function (totalDistance) {
+                    if (totalDistance < 4) {
+                        return "< 4 Kms";
+                    } else if (totalDistance < 10) {
+                        return "< 10 Kms";
+                    } else {
+                        return "> 10 Kms";
+                    }
+                }
+
+                isPredefinedAddress = function (address) {
+                    var predefinedAddresses = [
+                        "67 Rue des Moteaux, 76620 Le Havre, France",
+                        "74 Rue Averroès, 76620 Le Havre, France",
+                        "2 Rue des Moteaux, 76620 Le Havre, France",
+                        "57 Rue des Moteaux, 76620 Le Havre, France",
+                        "74 Rue Averroès, 76620 Le Havre, France",
+                        "M. Bastié, 76620 Le Havre, France",
+                        "2 Rue des Moteaux, 76620 Le Havre, France",
+                        "95 Rue Averroès, 76620 Le Havre, France",
+                        "118 Rue du Gymnase, 76430 Sandouville, France",
+                        "106 Rue Louis Blanc, 76620 Le Havre, France",
+                        "13 Rue Déro, 76620 Le Havre, France",
+                        "488 Rue Jean Dausset, 76620 Le Havre, France",
+                        "101 Rue des Moteaux, 76620 Le Havre, France",
+                        "280 Av. du Grand Hameau, 76620 Le Havre, France",
+                        "47 Rue de Tourneville, 76600 Le Havre, France",
+                        "83 Rue de Tourneville, 76600 Le Havre, France",
+                        "79 Rue de Tourneville, 76600 Le Havre, France",
+                        "46 Pl. de l'Hôtel de ville, 76600 Le Havre, France",
+                        "19 Rue Théodore Maillart, 76600 Le Havre, France",
+                        "23 Bd Amiral Mouchez, 76600 Le Havre, France",
+                        "19 Rue Théodore Maillart, 76600 Le Havre, France",
+                        "15 Rue Georges Braque, 76600 Le Havre, France",
+                        "LE HAVRE - Hôtel de la Communauté, 76600 Le Havre, France",
+                        "185 Rue Georges Braque, 76600 Le Havre, France",
+                        "20 Rue Théodore Maillart, 76600 Le Havre, France",
+                        "2 Rue Théodore Maillart, 76600 Le Havre, France",
+                        "17 Rue Théodore Maillart, 76600 Le Havre, France",
+                        "442 Rue Irène Joliot Curie, 76620 Le Havre, France",
+                        "444 Rue Irène Joliot Curie, 76620 Le Havre, France",
+                        "16 Rue Sylvestre Dumesnil, 76430 Saint-Romain-de-Colbosc, France",
+                        "53 Pl. de l'Hôtel de ville, 76600 Le Havre, France",
+                        "41 Pl. de l'Hôtel de ville, 76600 Le Havre, France",
+                        "49 Pl. de l'Hôtel de ville, 76600 Le Havre, France",
+                        "41 Pl. de l'Hôtel de ville Porte 2, 76600 Le Havre, France",
+                        "19 & 33 Pl. de l'Hôtel de ville, 76600 Le Havre, France",
+                        "Hôtel de Ville, 76600 Le Havre, France",
+                        "6 Rue Louis Blanc, 76620 Le Havre, France"
+                    ];
+                    return predefinedAddresses.includes(address);
+                }
+
+                checkFileExists = function () {
+                    var fileInput = document.getElementById("fileInput");
+                    if (fileInput.files.length === 0) {
+                        alert("Veuillez sélectionner un fichier avant de commencer le traitement.");
+                        return false;
+                    }
+                    return true;
+                }
+
+                handleFileUpload = function (event) {
+                    if (!checkFileExists()) {
+                        $(".loader-container").hide();
+                        return;
+                    }
+                    var fileInput = document.getElementById("fileInput");
+                    var file = fileInput.files[0];
+                    var reader = new FileReader();
+
+                    reader.onload = function (e) {
+                        var data = new Uint8Array(e.target.result);
+                        var workbook = XLSX.read(data, { type: "array" });
+
+                        var reportSheetIndex = workbook.SheetNames.findIndex(function (sheetName) {
+                            return ["report", "base", "rapport"].includes(sheetName.toLowerCase());
+                        });
+
+                        if (reportSheetIndex !== -1) {
+                            var reportWorksheet = workbook.Sheets[workbook.SheetNames[reportSheetIndex]];
+
+                            var reportData = XLSX.utils.sheet_to_json(reportWorksheet, { header: 1 });
+
+                            var includedColumns = ["Boîtier", "Véhicule", "Distance", "Emplacement", "Durée de l’arrêt", "Durée d’arrêt", /*"Trajet commencé", "Trajet terminé", "Date de début", "Date de l’arrêt"*/];
+
+                            var startRowNumber = 0;
+
+                            reportDataToSearchIndex = reportData.map(row => row);
+                            for (let i = 0; i < reportDataToSearchIndex.length; i++) {
+                                let row = reportDataToSearchIndex[i];
+                                let headerFound = false;
+                                for (let cell of row) {
+                                    if (cell === "Emplacement" || cell === "Distance") {
+                                        startRowNumber = i;
+                                        headerFound = true;
+                                        break;
+                                    }
+                                }
+                                if (headerFound) {
+                                    break;
+                                }
+                            }
+
+                            reportData = reportData.map(row => row.filter((_, index) => includedColumns.includes(reportData[startRowNumber][index])));
+
+                            processData(reportData);
+                        } else {
+                            alert("L'onglet 'Report' n'a pas été trouvé dans le fichier XLSX.");
+                            $(".loader-container").hide();
+                        }
+                    };
+
+                    reader.readAsArrayBuffer(file);
+                }
+
+                isDurationAR = function (fraction) {
+                    var totalMinutes = fraction * 24 * 60;
+                    return totalMinutes > 180;
+                }
+
+                formatTimestamp = function (timestamp) {
+                    const date = new Date(timestamp);
+
+                    const months = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+                    const month = months[date.getMonth()];
+                    const day = date.getDate();
+                    const year = date.getFullYear();
+                    const hours = date.getHours();
+                    const minutes = date.getMinutes();
+                    const seconds = date.getSeconds();
+                    const ampm = hours >= 12 ? 'PM' : 'AM';
+                    const formattedHours = hours % 12 || 12;
+
+                    const formattedDate = `${month} ${day}, ${year} ${formattedHours}:${minutes}:${seconds} ${ampm}`;
+
+                    return formattedDate;
+                }
+
+            });
+        </script>
+</body>
+
+</html>
